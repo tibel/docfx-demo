@@ -1,2 +1,2 @@
-# docfx-demo
-DocFX MSBuild project demo
+# DocFX demo
+Demo to show how to use DocFX with a MSBuild project
