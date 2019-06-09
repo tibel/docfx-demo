@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.Build.NoTargets/1.0.53">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+
+    <PreviewOutputFolder>bin/_site</PreviewOutputFolder>
+    <MetadataOutputFolder>bin</MetadataOutputFolder>
+    <LogFile>bin/log.txt</LogFile>
+    <LogLevel>Verbose</LogLevel>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="docfx.console" Version="2.42.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>
