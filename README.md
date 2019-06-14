@@ -3,7 +3,7 @@ Demo to show how to use DocFX with a MSBuild project
 
 ## Tasks
 - [x] Sample projects
-- [ ] DocFX
+- [x] DocFX
   - NoTargets project
   - issue with VS2019 (https://github.com/dotnet/docfx/issues/4437)
   - api yml files should be in obj folder
