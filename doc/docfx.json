@@ -14,10 +14,9 @@
   "build": {
     "content": [
       {
-        "files": [
-          "api/**.yml",
-          "api/index.md"
-        ]
+        "files": [ "**/*.yml" ],
+        "src": "obj/docfxapi",
+        "dest": "api"
       },
       {
         "files": [
