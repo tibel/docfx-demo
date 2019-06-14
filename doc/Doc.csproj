@@ -3,8 +3,6 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
 
-    <PreviewOutputFolder>bin/_site</PreviewOutputFolder>
-    <MetadataOutputFolder>bin</MetadataOutputFolder>
     <LogFile>bin/log.txt</LogFile>
     <LogLevel>Verbose</LogLevel>
   </PropertyGroup>

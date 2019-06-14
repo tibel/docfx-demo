@@ -45,7 +45,7 @@
         ]
       }
     ],
-    "dest": "_site",
+    "dest": "bin/_site",
     "globalMetadataFiles": [],
     "fileMetadataFiles": [],
     "template": [
