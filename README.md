@@ -7,7 +7,7 @@ Demo to show how to use DocFX with a MSBuild project
 - [x] build docs to bin folder
 - [x] move src out of doc folder
 - [x] api yml files should be in obj folder
-- [ ] [arc42](https://github.com/arc42/arc42-template/)
+- [x] [arc42](https://github.com/arc42/arc42-template/)
 - [ ] [GitInfo](https://github.com/kzu/GitInfo)
 
 

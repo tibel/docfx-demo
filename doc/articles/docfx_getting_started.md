@@ -4,7 +4,7 @@ Getting Started with `docfx`
 Getting Started
 ---------------
 
-This is a seed. ![Seed](../images/seed.jpg)
+This is a seed. ![Seed](images/seed.jpg)
 
 `docfx` is an API documentation generator for .NET, currently support C# and VB. It has the ability to extract triple slash comments out from your source code. What's more, it has syntax to link additional files to API to add additional remarks. `docfx` will scan your source code and your additional conceptual files and generate a complete HTML documentation website for you. `docfx` provides the flexibility for you to customize the website through templates. We currently have several embedded templates, including websites containing pure static html pages and also website managed by AngularJS.
 

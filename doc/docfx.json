@@ -22,6 +22,8 @@
         "files": [
           "articles/**.md",
           "articles/**/toc.yml",
+          "arc42/**.md",
+          "arc42/**/toc.yml",
           "toc.yml",
           "*.md"
         ]
@@ -30,7 +32,8 @@
     "resource": [
       {
         "files": [
-          "images/**"
+          "articles/images/**",
+		  "arc42/images/**"
         ]
       }
     ],
