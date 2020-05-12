@@ -9,6 +9,7 @@ Demo to show how to use DocFX with a MSBuild project
 - [x] api yml files should be in obj folder
 - [x] [arc42](https://github.com/arc42/arc42-template/)
 - [ ] [GitInfo](https://github.com/kzu/GitInfo)
+- [x] diagram support for [mermaid](https://github.com/mermaid-js/mermaid) and [nomnoml](https://github.com/skanaar/nomnoml)
 
 
 ## Other
