@@ -129,7 +129,7 @@ namespace CatLib
         /// </summary>
         /// <param name="nickName">it's string type.</param>
         /// <param name="age">It's an out and ref parameter.</param>
-        /// <param name="realName">It's an out paramter.</param>
+        /// <param name="realName">It's an out parameter.</param>
         /// <param name="isHealthy">It's an in parameter.</param>
         public Cat(string nickName, out int age, [Out] string realName, [In] bool isHealthy) { age = 1; }
 
@@ -158,7 +158,7 @@ namespace CatLib
         /// Override the method of <c>Object.Equals(object obj).</c>
         /// </summary>
         /// <param name="obj">Can pass any class type.</param>
-        /// <returns>The return value tell you whehter the compare operation is successful.</returns>
+        /// <returns>The return value tell you whether the compare operation is successful.</returns>
         public override bool Equals(object obj) { return false; }
 
         /// <inheritdoc />
@@ -168,7 +168,7 @@ namespace CatLib
         /// It's an <c>unsafe</c> method.
         /// As you see, <paramref name="catName"/> is a <b>pointer</b>, so we need to add <languageKeyword>unsafe</languageKeyword> keyword.
         /// </summary>
-        /// <param name="catName">Thie represent for cat name length.</param>
+        /// <param name="catName">This represent for cat name length.</param>
         /// <param name="parameters">Optional parameters.</param>
         /// <returns>Return cat tail's length.</returns>
         public unsafe long GetTailLength(int* catName, params object[] parameters) { return 1; }
@@ -183,12 +183,12 @@ namespace CatLib
         public static int operator +(Cat<T, K> lsr, int rsr) { return 1; }
 
         /// <summary>
-        /// Similar with operaotr +, refer to that topic.
+        /// Similar with operator +, refer to that topic.
         /// </summary>
         public static int operator -(Cat<T, K> lsr, int rsr) { return 1; }
 
         /// <summary>
-        /// Expilicit operator of this class.
+        /// Explicit operator of this class.
         /// <para>It means this cat can evolve to change to Tom. Tom and Jerry.</para>
         /// </summary>
         /// <param name="src">Instance of this class.</param>
@@ -322,7 +322,7 @@ namespace CatLib
     /// <summary>
     /// It's the class that contains ICat interface's extension method.
     /// <para>This class must be <b>public</b> and <b>static</b>.</para>
-    /// <para>Also it shouldn't be a geneic class</para>
+    /// <para>Also it shouldn't be a generic class</para>
     /// </summary>
     public static class ICatExtension
     {
