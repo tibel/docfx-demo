@@ -89,15 +89,21 @@ var nomnoml;
                 nodes[name].x = node.x;
                 nodes[name].y = node.y;
             });
+            var edgeWidth = 0;
+            var edgeHeight = 0;
             g.edges().forEach(function (edgeObj) {
                 var edge = g.edge(edgeObj);
                 var start = nodes[edgeObj.v];
                 var end = nodes[edgeObj.w];
                 rels[edge.id].path = nomnoml.skanaar.flatten([[start], edge.points, [end]]).map(toPoint);
+                edgeWidth = nomnoml.skanaar.max(edge.points.map(function (e) { return e.x; }));
+                edgeHeight = nomnoml.skanaar.max(edge.points.map(function (e) { return e.y; }));
             });
             var graph = g.graph();
-            var graphHeight = graph.height ? graph.height + 2 * config.gutter : 0;
-            var graphWidth = graph.width ? graph.width + 2 * config.gutter : 0;
+            var width = Math.max(graph.width, edgeWidth);
+            var height = Math.max(graph.height, edgeHeight);
+            var graphHeight = height ? height + 2 * config.gutter : 0;
+            var graphWidth = width ? width + 2 * config.gutter : 0;
             c.width = Math.max(textSize.width, graphWidth) + 2 * config.padding;
             c.height = textSize.height + graphHeight + config.padding;
         }
@@ -200,7 +206,7 @@ var nomnoml;
         nomnoml.render(graphics, config, layout, measurer.setFont);
         return { config: config };
     }
-    nomnoml.version = '0.7.1';
+    nomnoml.version = '0.8.0';
     function draw(canvas, code, scale) {
         return parseAndRender(code, nomnoml.skanaar.Canvas(canvas), canvas, scale || 1);
     }
@@ -313,6 +319,7 @@ var nomnoml;
                 edgeMargin: (+d.edgeMargin) || 0,
                 edges: d.edges == 'hard' ? 'hard' : 'rounded',
                 fill: (d.fill || '#eee8d5;#fdf6e3;#eee8d5;#fdf6e3').split(';'),
+                background: d.background || 'transparent',
                 fillArrows: d.fillArrows === 'true',
                 font: d.font || 'Calibri',
                 fontSize: (+d.fontSize) || 12,
@@ -576,14 +583,22 @@ var nomnoml;
             if (config.lineWidth % 2 === 1)
                 g.translate(0.5, 0.5);
         }
-        g.clear();
-        setFont(config, 'bold');
+        function setBackground() {
+            g.clear();
+            g.save();
+            g.strokeStyle('transparent');
+            g.fillStyle(config.background);
+            g.rect(0, 0, compartment.width, compartment.height).fill();
+            g.restore;
+        }
         g.save();
+        g.scale(config.zoom, config.zoom);
+        setBackground();
+        setFont(config, 'bold');
         g.lineWidth(config.lineWidth);
         g.lineJoin('round');
         g.lineCap('round');
         g.strokeStyle(config.stroke);
-        g.scale(config.zoom, config.zoom);
         snapToPixels();
         renderCompartment(compartment, nomnoml.buildStyle({ stroke: undefined }), 0);
         g.restore();
@@ -635,11 +650,6 @@ var nomnoml;
                     return chainable;
                 }
             };
-            function color255(r, g, b, a) {
-                var optionalAlpha = a === undefined ? 1 : a;
-                var comps = [Math.floor(r), Math.floor(g), Math.floor(b), optionalAlpha];
-                return 'rgba(' + comps.join() + ')';
-            }
             function tracePath(path, offset, s) {
                 s = s === undefined ? 1 : s;
                 offset = offset || { x: 0, y: 0 };
@@ -653,10 +663,6 @@ var nomnoml;
                 mousePos: function () { return mousePos; },
                 width: function () { return canvas.width; },
                 height: function () { return canvas.height; },
-                background: function (r, g, b) {
-                    ctx.fillStyle = color255(r, g, b);
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                },
                 clear: function () {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                 },
@@ -820,7 +826,6 @@ var nomnoml;
             return {
                 width: function () { return 0; },
                 height: function () { return 0; },
-                background: function () { },
                 clear: function () { },
                 circle: function (p, r) {
                     var element = Element('circle', { r: r, cx: tX(p.x), cy: tY(p.y) });
