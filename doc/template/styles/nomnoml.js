@@ -17,7 +17,6 @@
             stroke: conf.stroke || undefined,
             visual: conf.visual || 'class',
             direction: conf.direction || undefined,
-            hull: conf.hull || 'auto'
         };
     }
     nomnoml.buildStyle = buildStyle;
@@ -41,11 +40,19 @@
             this.type = type;
             this.name = name;
             this.compartments = compartments;
+            this.dividers = [];
         }
         return Classifier;
     }());
     nomnoml.Classifier = Classifier;
 })(nomnoml || (nomnoml = {}));
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
 var nomnoml;
 (function (nomnoml) {
     function layout(measurer, config, ast) {
@@ -54,16 +61,19 @@ var nomnoml;
                 return { width: 0, height: config.padding };
             measurer.setFont(config, fontWeight, 'normal');
             return {
-                width: Math.round(nomnoml.skanaar.max(lines.map(measurer.textWidth)) + 2 * config.padding),
+                width: Math.round(Math.max.apply(Math, lines.map(measurer.textWidth)) + 2 * config.padding),
                 height: Math.round(measurer.textHeight() * lines.length + 2 * config.padding)
             };
         }
         function layoutCompartment(c, compartmentIndex, style) {
+            var _a;
             var textSize = measureLines(c.lines, compartmentIndex ? 'normal' : 'bold');
-            c.width = textSize.width;
-            c.height = textSize.height;
-            if (!c.nodes.length && !c.relations.length)
+            if (!c.nodes.length && !c.relations.length) {
+                c.width = textSize.width;
+                c.height = textSize.height;
+                c.offset = { x: config.padding, y: config.padding };
                 return;
+            }
             c.nodes.forEach(layoutClassifier);
             var g = new dagre.graphlib.Graph();
             g.setGraph({
@@ -74,65 +84,110 @@ var nomnoml;
                 acyclicer: config.acyclicer,
                 ranker: config.ranker
             });
-            c.nodes.forEach(function (e) {
+            for (var _i = 0, _b = c.nodes; _i < _b.length; _i++) {
+                var e = _b[_i];
                 g.setNode(e.name, { width: e.layoutWidth, height: e.layoutHeight });
-            });
-            c.relations.forEach(function (r) {
-                g.setEdge(r.start, r.end, { id: r.id });
-            });
+            }
+            for (var _c = 0, _d = c.relations; _c < _d.length; _c++) {
+                var r = _d[_c];
+                if (r.assoc.indexOf('_') > -1) {
+                    g.setEdge(r.start, r.end, { id: r.id, minlen: 0 });
+                }
+                else if (((_a = config.gravity) !== null && _a !== void 0 ? _a : 1) != 1) {
+                    g.setEdge(r.start, r.end, { id: r.id, minlen: config.gravity });
+                }
+                else {
+                    g.setEdge(r.start, r.end, { id: r.id });
+                }
+            }
             dagre.layout(g);
             var rels = nomnoml.skanaar.indexBy(c.relations, 'id');
             var nodes = nomnoml.skanaar.indexBy(c.nodes, 'name');
-            function toPoint(o) { return { x: o.x, y: o.y }; }
             g.nodes().forEach(function (name) {
                 var node = g.node(name);
                 nodes[name].x = node.x;
                 nodes[name].y = node.y;
             });
-            var edgeWidth = 0;
-            var edgeHeight = 0;
+            var left = 0;
+            var right = 0;
+            var top = 0;
+            var bottom = 0;
             g.edges().forEach(function (edgeObj) {
                 var edge = g.edge(edgeObj);
                 var start = nodes[edgeObj.v];
                 var end = nodes[edgeObj.w];
-                rels[edge.id].path = nomnoml.skanaar.flatten([[start], edge.points, [end]]).map(toPoint);
-                edgeWidth = nomnoml.skanaar.max(edge.points.map(function (e) { return e.x; }));
-                edgeHeight = nomnoml.skanaar.max(edge.points.map(function (e) { return e.y; }));
+                var rel = rels[edge.id];
+                rel.path = __spreadArrays([start], edge.points, [end]).map(toPoint);
+                var startP = rel.path[1];
+                var endP = rel.path[rel.path.length - 2];
+                layoutLabel(rel.startLabel, startP, adjustQuadrant(quadrant(startP, start, 4), start, end));
+                layoutLabel(rel.endLabel, endP, adjustQuadrant(quadrant(endP, end, 2), end, start));
+                left = Math.min.apply(Math, __spreadArrays([left, rel.startLabel.x, rel.endLabel.x], edge.points.map(function (e) { return e.x; }), edge.points.map(function (e) { return e.x; })));
+                right = Math.max.apply(Math, __spreadArrays([right, rel.startLabel.x + rel.startLabel.width, rel.endLabel.x + rel.endLabel.width], edge.points.map(function (e) { return e.x; })));
+                top = Math.min.apply(Math, __spreadArrays([top, rel.startLabel.y, rel.endLabel.y], edge.points.map(function (e) { return e.y; })));
+                bottom = Math.max.apply(Math, __spreadArrays([bottom, rel.startLabel.y + rel.startLabel.height, rel.endLabel.y + rel.endLabel.height], edge.points.map(function (e) { return e.y; })));
             });
             var graph = g.graph();
-            var width = Math.max(graph.width, edgeWidth);
-            var height = Math.max(graph.height, edgeHeight);
+            var width = Math.max(graph.width, right - left);
+            var height = Math.max(graph.height, bottom - top);
             var graphHeight = height ? height + 2 * config.gutter : 0;
             var graphWidth = width ? width + 2 * config.gutter : 0;
             c.width = Math.max(textSize.width, graphWidth) + 2 * config.padding;
             c.height = textSize.height + graphHeight + config.padding;
+            c.offset = { x: config.padding - left, y: config.padding - top };
+        }
+        function toPoint(o) {
+            return { x: o.x, y: o.y };
+        }
+        function layoutLabel(label, point, quadrant) {
+            if (!label.text) {
+                label.width = 0;
+                label.height = 0;
+                label.x = point.x;
+                label.y = point.y;
+            }
+            else {
+                var fontSize = config.fontSize;
+                var lines = label.text.split('`');
+                label.width = Math.max.apply(Math, lines.map(function (l) { return measurer.textWidth(l); })),
+                    label.height = fontSize * lines.length;
+                label.x = point.x + ((quadrant == 1 || quadrant == 4) ? config.padding : -label.width - config.padding),
+                    label.y = point.y + ((quadrant == 3 || quadrant == 4) ? config.padding : -label.height - config.padding);
+            }
+        }
+        function quadrant(point, node, fallback) {
+            if (point.x < node.x && point.y < node.y)
+                return 1;
+            if (point.x > node.x && point.y < node.y)
+                return 2;
+            if (point.x > node.x && point.y > node.y)
+                return 3;
+            if (point.x < node.x && point.y > node.y)
+                return 4;
+            return fallback;
+        }
+        function adjustQuadrant(quadrant, point, opposite) {
+            if ((opposite.x == point.x) || (opposite.y == point.y))
+                return quadrant;
+            var flipHorizontally = [4, 3, 2, 1];
+            var flipVertically = [2, 1, 4, 3];
+            var oppositeQuadrant = (opposite.y < point.y) ?
+                ((opposite.x < point.x) ? 2 : 1) :
+                ((opposite.x < point.x) ? 3 : 4);
+            if (oppositeQuadrant === quadrant) {
+                if (config.direction === 'LR')
+                    return flipHorizontally[quadrant - 1];
+                if (config.direction === 'TB')
+                    return flipVertically[quadrant - 1];
+            }
+            return quadrant;
         }
         function layoutClassifier(clas) {
-            var layout = getLayouter(clas);
-            layout(clas);
+            var style = config.styles[clas.type] || nomnoml.styles.CLASS;
+            clas.compartments.forEach(function (co, i) { layoutCompartment(co, i, style); });
+            nomnoml.layouters[style.visual](config, clas);
             clas.layoutWidth = clas.width + 2 * config.edgeMargin;
             clas.layoutHeight = clas.height + 2 * config.edgeMargin;
-        }
-        function getLayouter(clas) {
-            var style = config.styles[clas.type] || nomnoml.styles.CLASS;
-            switch (style.hull) {
-                case 'icon': return function (clas) {
-                    clas.width = config.fontSize * 2.5;
-                    clas.height = config.fontSize * 2.5;
-                };
-                case 'empty': return function (clas) {
-                    clas.width = 0;
-                    clas.height = 0;
-                };
-                default: return function (clas) {
-                    clas.compartments.forEach(function (co, i) { layoutCompartment(co, i, style); });
-                    clas.width = nomnoml.skanaar.max(clas.compartments, 'width');
-                    clas.height = nomnoml.skanaar.sum(clas.compartments, 'height');
-                    clas.x = clas.layoutWidth / 2;
-                    clas.y = clas.layoutHeight / 2;
-                    clas.compartments.forEach(function (co) { co.width = clas.width; });
-                };
-            }
         }
         layoutCompartment(ast, 0, nomnoml.styles.CLASS);
         return ast;
@@ -143,7 +198,7 @@ var __extends = (this && this.__extends) || (function () {
     var extendStatics = function (d, b) {
         extendStatics = Object.setPrototypeOf ||
             ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
         return extendStatics(d, b);
     };
     return function (d, b) {
@@ -162,83 +217,78 @@ var nomnoml;
         return ImportDepthError;
     }(Error));
     nomnoml.ImportDepthError = ImportDepthError;
-    function compileFile(filepath, maxImportDepth, depth) {
+    function compileFile(filepath, maxImportDepth) {
         var fs = require('fs');
         var path = require('path');
-        if (depth > maxImportDepth) {
-            throw new ImportDepthError();
-        }
-        var source = fs.readFileSync(filepath, { encoding: 'utf8' });
         var directory = path.dirname(filepath);
-        return source.replace(/#import: *(.*)/g, function (a, file) {
-            return compileFile(path.join(directory, file), maxImportDepth, depth + 1);
-        });
+        var rootFileName = filepath.substr(directory.length);
+        function loadFile(filename) {
+            return fs.readFileSync(path.join(directory, filename), { encoding: 'utf8' });
+        }
+        return nomnoml.processImports(loadFile(rootFileName), loadFile, maxImportDepth);
     }
     nomnoml.compileFile = compileFile;
 })(nomnoml || (nomnoml = {}));
 var nomnoml;
 (function (nomnoml) {
+    nomnoml.version = '1.2.0';
     function fitCanvasSize(canvas, rect, zoom) {
         canvas.width = rect.width * zoom;
         canvas.height = rect.height * zoom;
     }
-    function setFont(config, isBold, isItalic, graphics) {
-        var style = (isBold === 'bold' ? 'bold' : '');
-        if (isItalic)
-            style = 'italic ' + style;
-        var defaultFont = 'Helvetica, sans-serif';
-        var font = nomnoml.skanaar.format('# #pt #, #', style, config.fontSize, config.font, defaultFont);
-        graphics.font(font);
-    }
-    function parseAndRender(code, graphics, canvas, scale) {
-        var parsedDiagram = nomnoml.parse(code);
-        var config = parsedDiagram.config;
-        var measurer = {
+    function Measurer(config, graphics) {
+        return {
             setFont: function (conf, bold, ital) {
-                setFont(conf, bold, ital, graphics);
+                graphics.setFont(conf.font, bold, ital, config.fontSize);
             },
             textWidth: function (s) { return graphics.measureText(s).width; },
             textHeight: function () { return config.leading * config.fontSize; }
         };
+    }
+    ;
+    function parseAndRender(code, graphics, canvas, scale) {
+        var parsedDiagram = nomnoml.parse(code);
+        var config = parsedDiagram.config;
+        var measurer = Measurer(config, graphics);
         var layout = nomnoml.layout(measurer, config, parsedDiagram.root);
-        fitCanvasSize(canvas, layout, config.zoom * scale);
+        if (canvas) {
+            fitCanvasSize(canvas, layout, config.zoom * scale);
+        }
         config.zoom *= scale;
         nomnoml.render(graphics, config, layout, measurer.setFont);
-        return { config: config };
+        return { config: config, layout: layout };
     }
-    nomnoml.version = '0.8.0';
     function draw(canvas, code, scale) {
         return parseAndRender(code, nomnoml.skanaar.Canvas(canvas), canvas, scale || 1);
     }
     nomnoml.draw = draw;
-    function renderSvg(code, docCanvas) {
-        var parsedDiagram = nomnoml.parse(code);
-        var config = parsedDiagram.config;
-        var skCanvas = nomnoml.skanaar.Svg('', docCanvas);
-        function setFont(config, isBold, isItalic) {
-            var style = (isBold === 'bold' ? 'bold' : '');
-            if (isItalic)
-                style = 'italic ' + style;
-            var defFont = 'Helvetica, sans-serif';
-            var template = 'font-weight:#; font-size:#pt; font-family:\'#\', #';
-            var font = nomnoml.skanaar.format(template, style, config.fontSize, config.font, defFont);
-            skCanvas.font(font);
-        }
-        var measurer = {
-            setFont: function (conf, bold, ital) {
-                setFont(conf, bold, ital);
-            },
-            textWidth: function (s) { return skCanvas.measureText(s).width; },
-            textHeight: function () { return config.leading * config.fontSize; }
-        };
-        var layout = nomnoml.layout(measurer, config, parsedDiagram.root);
-        nomnoml.render(skCanvas, config, layout, measurer.setFont);
+    function renderSvg(code, document) {
+        var skCanvas = nomnoml.skanaar.Svg('', document);
+        var _a = parseAndRender(code, skCanvas, null, 1), config = _a.config, layout = _a.layout;
         return skCanvas.serialize({
             width: layout.width,
             height: layout.height
         }, code, config.title);
     }
     nomnoml.renderSvg = renderSvg;
+    function processImports(source, loadFile, maxImportDepth) {
+        if (maxImportDepth === void 0) { maxImportDepth = 10; }
+        if (maxImportDepth == -1) {
+            throw new nomnoml.ImportDepthError();
+        }
+        function lenientLoadFile(key) {
+            try {
+                return loadFile(key) || '';
+            }
+            catch (e) {
+                return '';
+            }
+        }
+        return source.replace(/#import: *(.*)/g, function (a, file) {
+            return processImports(lenientLoadFile(file), loadFile, maxImportDepth - 1);
+        });
+    }
+    nomnoml.processImports = processImports;
 })(nomnoml || (nomnoml = {}));
 var nomnoml;
 (function (nomnoml) {
@@ -264,10 +314,16 @@ var nomnoml;
                 directives[tokens[0].trim()] = tokens[1].trim();
             }
             catch (e) {
-                throw new Error('line ' + (line.index + 1));
+                throw new Error('line ' + (line.index + 1) + ': Malformed directive');
             }
         });
-        var pureDiagramCode = lines.map(function (e) { return onlyCompilables(e.text); }).join('\n').trim();
+        var pureDiagramCode = lines.map(function (e) { return onlyCompilables(e.text); }).join('\n');
+        if (pureDiagramCode == '') {
+            return {
+                root: new nomnoml.Compartment([], [], []),
+                config: getConfig(directives)
+            };
+        }
         var parseTree = nomnoml.intermediateParse(pureDiagramCode);
         return {
             root: nomnoml.transformParseIntoSyntaxTree(parseTree),
@@ -298,12 +354,12 @@ var nomnoml;
                 center: nomnoml.skanaar.last(styleDef.match('align=([^ ]*)') || []) == 'left' ? false : true,
                 fill: nomnoml.skanaar.last(styleDef.match('fill=([^ ]*)') || []),
                 stroke: nomnoml.skanaar.last(styleDef.match('stroke=([^ ]*)') || []),
-                visual: nomnoml.skanaar.last(styleDef.match('visual=([^ ]*)') || []) || 'class',
+                visual: (nomnoml.skanaar.last(styleDef.match('visual=([^ ]*)') || []) || 'class'),
                 direction: directionToDagre(nomnoml.skanaar.last(styleDef.match('direction=([^ ]*)') || [])),
-                hull: 'auto'
             };
         }
         function getConfig(d) {
+            var _a;
             var userStyles = {};
             for (var key in d) {
                 if (key[0] != '.')
@@ -317,18 +373,19 @@ var nomnoml;
                 direction: directionToDagre(d.direction),
                 gutter: +d.gutter || 5,
                 edgeMargin: (+d.edgeMargin) || 0,
+                gravity: +((_a = d.gravity) !== null && _a !== void 0 ? _a : 1),
                 edges: d.edges == 'hard' ? 'hard' : 'rounded',
                 fill: (d.fill || '#eee8d5;#fdf6e3;#eee8d5;#fdf6e3').split(';'),
                 background: d.background || 'transparent',
                 fillArrows: d.fillArrows === 'true',
-                font: d.font || 'Calibri',
+                font: d.font || 'Helvetica',
                 fontSize: (+d.fontSize) || 12,
                 leading: (+d.leading) || 1.25,
                 lineWidth: (+d.lineWidth) || 3,
                 padding: (+d.padding) || 8,
                 spacing: (+d.spacing) || 40,
                 stroke: d.stroke || '#33322E',
-                title: d.title || 'nomnoml',
+                title: d.title || '',
                 zoom: +d.zoom || 1,
                 acyclicer: d.acyclicer === 'greedy' ? 'greedy' : undefined,
                 ranker: parseRanker(d.ranker),
@@ -367,8 +424,8 @@ var nomnoml;
                         assoc: p.assoc,
                         start: p.start.parts[0][0],
                         end: p.end.parts[0][0],
-                        startLabel: p.startLabel,
-                        endLabel: p.endLabel
+                        startLabel: { text: p.startLabel },
+                        endLabel: { text: p.endLabel }
                     });
                 }
                 if (isAstClassifier(p)) {
@@ -404,16 +461,15 @@ var nomnoml;
 var nomnoml;
 (function (nomnoml) {
     function render(graphics, config, compartment, setFont) {
-        var padding = config.padding;
         var g = graphics;
         var vm = nomnoml.skanaar.vector;
         function renderCompartment(compartment, style, level) {
             g.save();
-            g.translate(padding, padding);
+            g.translate(compartment.offset.x, compartment.offset.y);
             g.fillStyle(style.stroke || config.stroke);
             compartment.lines.forEach(function (text, i) {
                 g.textAlign(style.center ? 'center' : 'left');
-                var x = style.center ? compartment.width / 2 - padding : 0;
+                var x = style.center ? compartment.width / 2 - config.padding : 0;
                 var y = (0.5 + (i + 0.5) * config.leading) * config.fontSize;
                 if (text) {
                     g.fillText(text, x, y);
@@ -426,7 +482,7 @@ var nomnoml;
                 }
             });
             g.translate(config.gutter, config.gutter);
-            compartment.relations.forEach(function (r) { renderRelation(r, compartment); });
+            compartment.relations.forEach(function (r) { renderRelation(r); });
             compartment.nodes.forEach(function (n) { renderNode(n, level); });
             g.restore();
         }
@@ -440,35 +496,27 @@ var nomnoml;
                 var dash = Math.max(4, 2 * config.lineWidth);
                 g.setLineDash([dash, dash]);
             }
-            var drawNode = nomnoml.visualizers[style.visual] || nomnoml.visualizers["class"];
+            var drawNode = nomnoml.visualizers[style.visual] || nomnoml.visualizers.class;
+            g.setData('name', node.name);
             drawNode(node, x, y, config, g);
             g.setLineDash([]);
-            var yDivider = (style.visual === 'actor' ? y + padding * 3 / 4 : y);
+            g.save();
+            g.translate(x, y);
             node.compartments.forEach(function (part, i) {
                 var s = i > 0 ? nomnoml.buildStyle({ stroke: style.stroke }) : style;
                 if (s.empty)
                     return;
                 g.save();
-                g.translate(x, yDivider);
+                g.translate(part.x, part.y);
                 setFont(config, s.bold ? 'bold' : 'normal', s.italic ? 'italic' : undefined);
                 renderCompartment(part, s, level + 1);
                 g.restore();
-                if (i + 1 === node.compartments.length)
-                    return;
-                yDivider += part.height;
-                if (style.visual === 'frame' && i === 0) {
-                    var w = g.measureText(node.name).width + part.height / 2 + padding;
-                    g.path([
-                        { x: x, y: yDivider },
-                        { x: x + w - part.height / 2, y: yDivider },
-                        { x: x + w, y: yDivider - part.height / 2 },
-                        { x: x + w, y: yDivider - part.height }
-                    ]).stroke();
-                }
-                else {
-                    g.path([{ x: x, y: yDivider }, { x: x + node.width, y: yDivider }]).stroke();
-                }
             });
+            for (var _i = 0, _a = node.dividers; _i < _a.length; _i++) {
+                var divider = _a[_i];
+                g.path(divider).stroke();
+            }
+            g.restore();
         }
         function strokePath(p) {
             if (config.edges === 'rounded') {
@@ -485,60 +533,23 @@ var nomnoml;
                 g.path(p).stroke();
         }
         var empty = false, filled = true, diamond = true;
-        function renderLabel(text, pos, quadrant) {
-            if (text) {
-                var fontSize = config.fontSize;
-                var lines = text.split('`');
-                var area = {
-                    width: nomnoml.skanaar.max(lines.map(function (l) { return g.measureText(l).width; })),
-                    height: fontSize * lines.length
-                };
-                var origin = {
-                    x: pos.x + ((quadrant == 1 || quadrant == 4) ? padding : -area.width - padding),
-                    y: pos.y + ((quadrant == 3 || quadrant == 4) ? padding : -area.height - padding)
-                };
-                lines.forEach(function (l, i) { g.fillText(l, origin.x, origin.y + fontSize * (i + 1)); });
-            }
+        function renderLabel(label) {
+            if (!label || !label.text)
+                return;
+            var fontSize = config.fontSize;
+            var lines = label.text.split('`');
+            lines.forEach(function (l, i) { return g.fillText(l, label.x, label.y + fontSize * (i + 1)); });
         }
-        function quadrant(point, node, fallback) {
-            if (point.x < node.x && point.y < node.y)
-                return 1;
-            if (point.x > node.x && point.y < node.y)
-                return 2;
-            if (point.x > node.x && point.y > node.y)
-                return 3;
-            if (point.x < node.x && point.y > node.y)
-                return 4;
-            return fallback;
-        }
-        function adjustQuadrant(quadrant, point, opposite) {
-            if ((opposite.x == point.x) || (opposite.y == point.y))
-                return quadrant;
-            var flipHorizontally = [4, 3, 2, 1];
-            var flipVertically = [2, 1, 4, 3];
-            var oppositeQuadrant = (opposite.y < point.y) ?
-                ((opposite.x < point.x) ? 2 : 1) :
-                ((opposite.x < point.x) ? 3 : 4);
-            if (oppositeQuadrant === quadrant) {
-                if (config.direction === 'LR')
-                    return flipHorizontally[quadrant - 1];
-                if (config.direction === 'TB')
-                    return flipVertically[quadrant - 1];
-            }
-            return quadrant;
-        }
-        function renderRelation(r, compartment) {
-            var startNode = nomnoml.skanaar.find(compartment.nodes, function (e) { return e.name == r.start; });
-            var endNode = nomnoml.skanaar.find(compartment.nodes, function (e) { return e.name == r.end; });
+        function renderRelation(r) {
             var start = r.path[1];
             var end = r.path[r.path.length - 2];
             var path = r.path.slice(1, -1);
             g.fillStyle(config.stroke);
             setFont(config, 'normal');
-            renderLabel(r.startLabel, start, adjustQuadrant(quadrant(start, startNode, 4), start, end));
-            renderLabel(r.endLabel, end, adjustQuadrant(quadrant(end, endNode, 2), end, start));
-            if (r.assoc !== '-/-') {
-                if (nomnoml.skanaar.hasSubstring(r.assoc, '--')) {
+            renderLabel(r.startLabel);
+            renderLabel(r.endLabel);
+            if (r.assoc !== '-/-' && r.assoc !== '_/_') {
+                if (nomnoml.skanaar.hasSubstring(r.assoc, '--') || nomnoml.skanaar.hasSubstring(r.assoc, '__')) {
                     var dash = Math.max(4, 2 * config.lineWidth);
                     g.setLineDash([dash, dash]);
                     strokePath(path);
@@ -557,7 +568,7 @@ var nomnoml;
                 else if (id === 'o')
                     drawArrow(path, empty, end, diamond);
             }
-            var tokens = r.assoc.split('-');
+            var tokens = r.assoc.split(/[-_]/);
             drawArrowEnd(nomnoml.skanaar.last(tokens), path, end);
             drawArrowEnd(tokens[0], path.reverse(), start);
         }
@@ -589,7 +600,7 @@ var nomnoml;
             g.strokeStyle('transparent');
             g.fillStyle(config.background);
             g.rect(0, 0, compartment.width, compartment.height).fill();
-            g.restore;
+            g.restore();
         }
         g.save();
         g.scale(config.zoom, config.zoom);
@@ -718,13 +729,15 @@ var nomnoml;
                     ctx.closePath();
                     return chainable;
                 },
-                font: function (f) { ctx.font = f; },
+                setFont: function (font, bold, ital, fontSize) {
+                    ctx.font = bold + " " + (ital || '') + " " + fontSize + "pt " + font + ", Helvetica, sans-serif";
+                },
                 fillStyle: function (s) { ctx.fillStyle = s; },
                 strokeStyle: function (s) { ctx.strokeStyle = s; },
                 textAlign: function (a) { ctx.textAlign = a; },
-                lineCap: function (cap) { ctx.lineCap = cap; return chainable; },
-                lineJoin: function (join) { ctx.lineJoin = join; return chainable; },
-                lineWidth: function (w) { ctx.lineWidth = w; return chainable; },
+                lineCap: function (cap) { ctx.lineCap = cap; },
+                lineJoin: function (join) { ctx.lineJoin = join; },
+                lineWidth: function (w) { ctx.lineWidth = w; },
                 arcTo: function () { return ctx.arcTo.apply(ctx, arguments); },
                 beginPath: function () { return ctx.beginPath.apply(ctx, arguments); },
                 fillText: function () { return ctx.fillText.apply(ctx, arguments); },
@@ -732,6 +745,7 @@ var nomnoml;
                 measureText: function () { return ctx.measureText.apply(ctx, arguments); },
                 moveTo: function () { return ctx.moveTo.apply(ctx, arguments); },
                 restore: function () { return ctx.restore.apply(ctx, arguments); },
+                setData: function (name, value) { },
                 save: function () { return ctx.save.apply(ctx, arguments); },
                 scale: function () { return ctx.scale.apply(ctx, arguments); },
                 setLineDash: function () { return ctx.setLineDash.apply(ctx, arguments); },
@@ -747,55 +761,75 @@ var nomnoml;
     var skanaar;
     (function (skanaar) {
         function xmlEncode(str) {
-            return str
+            return (str !== null && str !== void 0 ? str : '').toString()
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&apos;');
         }
-        function Svg(globalStyle, canvas) {
+        skanaar.charWidths = { "0": 10, "1": 10, "2": 10, "3": 10, "4": 10, "5": 10, "6": 10, "7": 10, "8": 10, "9": 10, " ": 5, "!": 5, "\"": 6, "#": 10, "$": 10, "%": 15, "&": 11, "'": 4, "(": 6, ")": 6, "*": 7, "+": 10, ",": 5, "-": 6, ".": 5, "/": 5, ":": 5, ";": 5, "<": 10, "=": 10, ">": 10, "?": 10, "@": 17, "A": 11, "B": 11, "C": 12, "D": 12, "E": 11, "F": 10, "G": 13, "H": 12, "I": 5, "J": 9, "K": 11, "L": 10, "M": 14, "N": 12, "O": 13, "P": 11, "Q": 13, "R": 12, "S": 11, "T": 10, "U": 12, "V": 11, "W": 16, "X": 11, "Y": 11, "Z": 10, "[": 5, "\\": 5, "]": 5, "^": 8, "_": 10, "`": 6, "a": 10, "b": 10, "c": 9, "d": 10, "e": 10, "f": 5, "g": 10, "h": 10, "i": 4, "j": 4, "k": 9, "l": 4, "m": 14, "n": 10, "o": 10, "p": 10, "q": 10, "r": 6, "s": 9, "t": 5, "u": 10, "v": 9, "w": 12, "x": 9, "y": 9, "z": 9, "{": 6, "|": 5, "}": 6, "~": 10 };
+        function Svg(globalStyle, document) {
             var initialState = {
                 x: 0,
                 y: 0,
                 stroke: 'none',
+                strokeWidth: 1,
                 dashArray: 'none',
                 fill: 'none',
                 textAlign: 'left',
-                font: null
+                font: 'Helvetica, Arial, sans-serif',
+                fontSize: 12,
+                attributes: {}
             };
             var states = [initialState];
             var elements = [];
-            var ctx = canvas ? canvas.getContext('2d') : null;
-            var canUseCanvas = false;
-            var waitingForFirstFont = true;
-            var docFont = '';
-            function Element(name, attr, content) {
-                return {
-                    name: name,
-                    attr: attr,
-                    content: content || undefined,
-                    stroke: function () {
-                        var base = this.attr.style || '';
-                        this.attr.style = base + 'stroke:' + lastDefined('stroke') +
-                            ';fill:none;stroke-dasharray:' + lastDefined('dashArray') + ';';
-                        return this;
-                    },
-                    fill: function () {
-                        var base = this.attr.style || '';
-                        this.attr.style = base + 'stroke:none; fill:' + lastDefined('fill') + ';';
-                        return this;
-                    },
-                    fillAndStroke: function () {
-                        var base = this.attr.style || '';
-                        this.attr.style = base + 'stroke:' + lastDefined('stroke') + ';fill:' + lastDefined('fill') +
-                            ';stroke-dasharray:' + lastDefined('dashArray') + ';';
-                        return this;
-                    }
+            var measurementCanvas = document ? document.createElement('canvas') : null;
+            var ctx = measurementCanvas ? measurementCanvas.getContext('2d') : null;
+            var Element = (function () {
+                function Element(name, attr, content) {
+                    this.name = name;
+                    this.attr = attr;
+                    this.content = content || undefined;
+                }
+                Element.prototype.stroke = function () {
+                    var base = this.attr.style || '';
+                    this.attr.style = base +
+                        'stroke:' + lastDefined('stroke') +
+                        ';fill:none' +
+                        ';stroke-dasharray:' + lastDefined('dashArray') +
+                        ';stroke-width:' + lastDefined('strokeWidth') + ';';
+                    return this;
                 };
-            }
+                Element.prototype.fill = function () {
+                    var base = this.attr.style || '';
+                    this.attr.style = base + 'stroke:none; fill:' + lastDefined('fill') + ';';
+                    return this;
+                };
+                Element.prototype.fillAndStroke = function () {
+                    var base = this.attr.style || '';
+                    this.attr.style = base +
+                        'stroke:' + lastDefined('stroke') +
+                        ';fill:' + lastDefined('fill') +
+                        ';stroke-dasharray:' + lastDefined('dashArray') +
+                        ';stroke-width:' + lastDefined('strokeWidth') + ';';
+                    return this;
+                };
+                return Element;
+            }());
             function State(dx, dy) {
-                return { x: dx, y: dy, stroke: null, fill: null, textAlign: null, dashArray: 'none', font: null };
+                return {
+                    x: dx,
+                    y: dy,
+                    stroke: null,
+                    strokeWidth: null,
+                    fill: null,
+                    textAlign: null,
+                    dashArray: 'none',
+                    font: null,
+                    fontSize: null,
+                    attributes: null
+                };
             }
             function trans(coord, axis) {
                 states.forEach(function (t) { coord += t[axis]; });
@@ -819,7 +853,11 @@ var nomnoml;
                 return newElement('path', { d: d });
             }
             function newElement(type, attr, content) {
-                var element = Element(type, attr, content);
+                var element = new Element(type, attr, content);
+                var extraData = lastDefined('attributes');
+                for (var key in extraData) {
+                    element.attr['data-' + key] = extraData[key];
+                }
                 elements.push(element);
                 return element;
             }
@@ -828,9 +866,7 @@ var nomnoml;
                 height: function () { return 0; },
                 clear: function () { },
                 circle: function (p, r) {
-                    var element = Element('circle', { r: r, cx: tX(p.x), cy: tY(p.y) });
-                    elements.push(element);
-                    return element;
+                    return newElement('circle', { r: r, cx: tX(p.x), cy: tY(p.y) });
                 },
                 ellipse: function (center, w, h, start, stop) {
                     if (stop) {
@@ -858,31 +894,10 @@ var nomnoml;
                     element.attr.d += ' Z';
                     return element;
                 },
-                font: function (font) {
+                setFont: function (font, bold, ital, fontSize) {
+                    var font = bold + " " + (ital || '') + " " + fontSize + "pt " + font + ", Helvetica, sans-serif";
                     last(states).font = font;
-                    if (waitingForFirstFont) {
-                        if (ctx) {
-                            var primaryFont = font.replace(/^.*family:/, '').replace(/[, ].*$/, '');
-                            primaryFont = primaryFont.replace(/'/g, '');
-                            canUseCanvas = /^(Arial|Helvetica|Times|Times New Roman)$/.test(primaryFont);
-                            if (canUseCanvas) {
-                                var fontSize = font.replace(/^.*font-size:/, '').replace(/;.*$/, '') + ' ';
-                                if (primaryFont === 'Arial') {
-                                    docFont = fontSize + 'Arial, Helvetica, sans-serif';
-                                }
-                                else if (primaryFont === 'Helvetica') {
-                                    docFont = fontSize + 'Helvetica, Arial, sans-serif';
-                                }
-                                else if (primaryFont === 'Times New Roman') {
-                                    docFont = fontSize + '"Times New Roman", Times, serif';
-                                }
-                                else if (primaryFont === 'Times') {
-                                    docFont = fontSize + 'Times, "Times New Roman", serif';
-                                }
-                            }
-                        }
-                        waitingForFirstFont = false;
-                    }
+                    last(states).fontSize = fontSize;
                 },
                 strokeStyle: function (stroke) {
                     last(states).stroke = stroke;
@@ -899,39 +914,36 @@ var nomnoml;
                 fillText: function (text, x, y) {
                     var attr = { x: tX(x), y: tY(y), style: 'fill: ' + last(states).fill + ';' };
                     var font = lastDefined('font');
-                    if (font.indexOf('bold') === -1) {
-                        attr.style += 'font-weight:normal;';
-                    }
-                    if (font.indexOf('italic') > -1) {
-                        attr.style += 'font-style:italic;';
+                    if (font) {
+                        attr.style += 'font:' + font + ';';
                     }
                     if (lastDefined('textAlign') === 'center') {
                         attr.style += 'text-anchor: middle;';
                     }
                     return newElement('text', attr, text);
                 },
-                lineCap: function (cap) { globalStyle += ';stroke-linecap:' + cap; return last(elements); },
-                lineJoin: function (join) { globalStyle += ';stroke-linejoin:' + join; return last(elements); },
+                lineCap: function (cap) { globalStyle += ';stroke-linecap:' + cap; },
+                lineJoin: function (join) { globalStyle += ';stroke-linejoin:' + join; },
                 lineTo: function (x, y) {
                     last(elements).attr.d += ('L' + tX(x) + ' ' + tY(y) + ' ');
                     return last(elements);
                 },
-                lineWidth: function (w) { globalStyle += ';stroke-width:' + w; return last(elements); },
+                lineWidth: function (w) {
+                    last(states).strokeWidth = w;
+                },
                 measureText: function (s) {
-                    if (canUseCanvas) {
-                        var fontStr = lastDefined('font');
-                        var italicSpec = (/\bitalic\b/.test(fontStr) ? 'italic' : 'normal') + ' normal ';
-                        var boldSpec = /\bbold\b/.test(fontStr) ? 'bold ' : 'normal ';
-                        ctx.font = italicSpec + boldSpec + docFont;
+                    if (ctx) {
+                        ctx.font = lastDefined('font') || 'normal 12pt Helvetica';
                         return ctx.measureText(s);
                     }
                     else {
                         return {
                             width: skanaar.sum(s, function (c) {
-                                if (c === 'M' || c === 'W') {
-                                    return 14;
+                                var scale = lastDefined('fontSize') / 12;
+                                if (skanaar.charWidths[c]) {
+                                    return skanaar.charWidths[c] * scale;
                                 }
-                                return c.charCodeAt(0) < 200 ? 9.5 : 16;
+                                return 16 * scale;
                             })
                         };
                     }
@@ -944,6 +956,9 @@ var nomnoml;
                 },
                 save: function () {
                     states.push(State(0, 0));
+                },
+                setData: function (name, value) {
+                    lastDefined('attributes')[name] = value;
                 },
                 scale: function () { },
                 setLineDash: function (d) {
@@ -961,18 +976,17 @@ var nomnoml;
                 },
                 serialize: function (size, desc, title) {
                     function toAttr(obj) {
-                        function toKeyValue(key) { return key + '="' + obj[key] + '"'; }
-                        return Object.keys(obj).map(toKeyValue).join(' ');
+                        return Object.keys(obj).map(function (key) { return key + "=\"" + xmlEncode(obj[key]) + "\""; }).join(' ');
                     }
                     function toHtml(e) {
-                        return '<' + e.name + ' ' + toAttr(e.attr) + '>' + (e.content ? xmlEncode(e.content) : '') + '</' + e.name + '>';
+                        return "<" + e.name + " " + toAttr(e.attr) + ">" + xmlEncode(e.content) + "</" + e.name + ">";
                     }
                     var elementsToSerialize = elements;
                     if (desc) {
-                        elementsToSerialize.unshift(Element('desc', {}, desc));
+                        elementsToSerialize.unshift(new Element('desc', {}, desc));
                     }
                     if (title) {
-                        elementsToSerialize.unshift(Element('title', {}, title));
+                        elementsToSerialize.unshift(new Element('title', {}, title));
                     }
                     var innerSvg = elementsToSerialize.map(toHtml).join('\n  ');
                     var attrs = {
@@ -984,7 +998,7 @@ var nomnoml;
                         xmlns: 'http://www.w3.org/2000/svg',
                         'xmlns:xlink': 'http://www.w3.org/1999/xlink',
                         'xmlns:ev': 'http://www.w3.org/2001/xml-events',
-                        style: lastDefined('font') + ';' + globalStyle
+                        style: 'font:' + lastDefined('font') + ';' + globalStyle,
                     };
                     return '<svg ' + toAttr(attrs) + '>\n  ' + innerSvg + '\n</svg>';
                 }
@@ -997,39 +1011,20 @@ var nomnoml;
 (function (nomnoml) {
     var skanaar;
     (function (skanaar) {
-        function plucker(pluckerDef) {
-            switch (typeof pluckerDef) {
-                case 'undefined': return function (e) { return e; };
-                case 'string': return function (obj) { return obj[pluckerDef]; };
-                case 'number': return function (obj) { return obj[pluckerDef]; };
-                case 'function': return pluckerDef;
-            }
+        function range(_a, count) {
+            var min = _a[0], max = _a[1];
+            var output = [];
+            for (var i = 0; i < count; i++)
+                output.push(min + (max - min) * i / (count - 1));
+            return output;
         }
-        skanaar.plucker = plucker;
-        function max(list, plucker) {
-            var transform = skanaar.plucker(plucker);
-            var maximum = transform(list[0]);
-            for (var i = 0; i < list.length; i++) {
-                var item = transform(list[i]);
-                maximum = (item > maximum) ? item : maximum;
-            }
-            return maximum;
-        }
-        skanaar.max = max;
-        function sum(list, plucker) {
-            var transform = skanaar.plucker(plucker);
+        skanaar.range = range;
+        function sum(list, transform) {
             for (var i = 0, summation = 0, len = list.length; i < len; i++)
                 summation += transform(list[i]);
             return summation;
         }
         skanaar.sum = sum;
-        function flatten(lists) {
-            var out = [];
-            for (var i = 0; i < lists.length; i++)
-                out = out.concat(lists[i]);
-            return out;
-        }
-        skanaar.flatten = flatten;
         function find(list, predicate) {
             for (var i = 0; i < list.length; i++)
                 if (predicate(list[i]))
@@ -1049,20 +1044,6 @@ var nomnoml;
             return haystack.indexOf(needle) !== -1;
         }
         skanaar.hasSubstring = hasSubstring;
-        function format(template) {
-            var parts = [];
-            for (var _i = 1; _i < arguments.length; _i++) {
-                parts[_i - 1] = arguments[_i];
-            }
-            var matrix = template.split('#');
-            var output = [matrix[0]];
-            for (var i = 0; i < matrix.length - 1; i++) {
-                output.push(parts[i] || '');
-                output.push(matrix[i + 1]);
-            }
-            return output.join('');
-        }
-        skanaar.format = format;
         function merged(a, b) {
             function assign(target, data) {
                 for (var key in data)
@@ -1081,12 +1062,11 @@ var nomnoml;
             return obj;
         }
         skanaar.indexBy = indexBy;
-        function uniqueBy(list, pluckerDef) {
+        function uniqueBy(list, property) {
             var seen = {};
-            var getKey = skanaar.plucker(pluckerDef);
             var out = [];
             for (var i = 0; i < list.length; i++) {
-                var key = getKey(list[i]);
+                var key = list[i][property];
                 if (!seen[key]) {
                     seen[key] = true;
                     out.push(list[i]);
@@ -1120,9 +1100,9 @@ var nomnoml;
         CHOICE: nomnoml.buildStyle({ visual: 'rhomb', center: true }),
         CLASS: nomnoml.buildStyle({ visual: 'class', center: true, bold: true }),
         DATABASE: nomnoml.buildStyle({ visual: 'database', center: true, bold: true }),
-        END: nomnoml.buildStyle({ visual: 'end', center: true, empty: true, hull: 'icon' }),
+        END: nomnoml.buildStyle({ visual: 'end', center: true, empty: true }),
         FRAME: nomnoml.buildStyle({ visual: 'frame' }),
-        HIDDEN: nomnoml.buildStyle({ visual: 'hidden', center: true, empty: true, hull: 'empty' }),
+        HIDDEN: nomnoml.buildStyle({ visual: 'hidden', center: true, empty: true }),
         INPUT: nomnoml.buildStyle({ visual: 'input', center: true }),
         INSTANCE: nomnoml.buildStyle({ visual: 'class', center: true, underline: true }),
         LABEL: nomnoml.buildStyle({ visual: 'none' }),
@@ -1131,37 +1111,220 @@ var nomnoml;
         RECEIVER: nomnoml.buildStyle({ visual: 'receiver' }),
         REFERENCE: nomnoml.buildStyle({ visual: 'class', center: true, dashed: true }),
         SENDER: nomnoml.buildStyle({ visual: 'sender' }),
-        START: nomnoml.buildStyle({ visual: 'start', center: true, empty: true, hull: 'icon' }),
+        START: nomnoml.buildStyle({ visual: 'start', center: true, empty: true }),
         STATE: nomnoml.buildStyle({ visual: 'roundrect', center: true }),
+        TABLE: nomnoml.buildStyle({ visual: 'table', center: true, bold: true }),
         TRANSCEIVER: nomnoml.buildStyle({ visual: 'transceiver' }),
-        USECASE: nomnoml.buildStyle({ visual: 'ellipse', center: true })
+        USECASE: nomnoml.buildStyle({ visual: 'ellipse', center: true }),
+    };
+    function box(config, clas) {
+        clas.width = Math.max.apply(Math, clas.compartments.map(function (e) { return e.width; }));
+        clas.height = nomnoml.skanaar.sum(clas.compartments, function (e) { return e.height; });
+        clas.dividers = [];
+        var y = 0;
+        for (var _i = 0, _a = clas.compartments; _i < _a.length; _i++) {
+            var comp = _a[_i];
+            comp.x = 0;
+            comp.y = y;
+            comp.width = clas.width;
+            y += comp.height;
+            if (comp != nomnoml.skanaar.last(clas.compartments))
+                clas.dividers.push([{ x: 0, y: y }, { x: clas.width, y: y }]);
+        }
+    }
+    function icon(config, clas) {
+        clas.dividers = [];
+        clas.compartments = [];
+        clas.width = config.fontSize * 2.5;
+        clas.height = config.fontSize * 2.5;
+    }
+    nomnoml.layouters = {
+        actor: function (config, clas) {
+            clas.width = Math.max.apply(Math, __spreadArrays([config.padding * 2], clas.compartments.map(function (e) { return e.width; })));
+            clas.height = config.padding * 3 + nomnoml.skanaar.sum(clas.compartments, function (e) { return e.height; });
+            clas.dividers = [];
+            var y = config.padding * 3;
+            for (var _i = 0, _a = clas.compartments; _i < _a.length; _i++) {
+                var comp = _a[_i];
+                comp.x = 0;
+                comp.y = y;
+                comp.width = clas.width;
+                y += comp.height;
+                if (comp != nomnoml.skanaar.last(clas.compartments))
+                    clas.dividers.push([{ x: config.padding, y: y }, { x: clas.width - config.padding, y: y }]);
+            }
+        },
+        class: box,
+        database: function (config, clas) {
+            clas.width = Math.max.apply(Math, clas.compartments.map(function (e) { return e.width; }));
+            clas.height = nomnoml.skanaar.sum(clas.compartments, function (e) { return e.height; }) + config.padding * 2;
+            clas.dividers = [];
+            var y = config.padding * 1.5;
+            for (var _i = 0, _a = clas.compartments; _i < _a.length; _i++) {
+                var comp = _a[_i];
+                comp.x = 0;
+                comp.y = y;
+                comp.width = clas.width;
+                y += comp.height;
+                if (comp != nomnoml.skanaar.last(clas.compartments)) {
+                    var path = nomnoml.skanaar.range([0, Math.PI], 16).map(function (a) { return ({
+                        x: clas.width * 0.5 * (1 - Math.cos(a)),
+                        y: y + config.padding * (0.75 * Math.sin(a) - 0.5),
+                    }); });
+                    clas.dividers.push(path);
+                }
+            }
+        },
+        ellipse: function (config, clas) {
+            var width = Math.max.apply(Math, clas.compartments.map(function (e) { return e.width; }));
+            var height = nomnoml.skanaar.sum(clas.compartments, function (e) { return e.height; });
+            clas.width = width * 1.25;
+            clas.height = height * 1.25;
+            clas.dividers = [];
+            var y = height * 0.125;
+            var sq = function (x) { return x * x; };
+            var rimPos = function (y) { return Math.sqrt(sq(0.5) - sq(y / clas.height - 0.5)) * clas.width; };
+            for (var _i = 0, _a = clas.compartments; _i < _a.length; _i++) {
+                var comp = _a[_i];
+                comp.x = width * 0.125;
+                comp.y = y;
+                comp.width = width;
+                y += comp.height;
+                if (comp != nomnoml.skanaar.last(clas.compartments))
+                    clas.dividers.push([
+                        { x: clas.width / 2 + rimPos(y) - 1, y: y },
+                        { x: clas.width / 2 - rimPos(y) + 1, y: y }
+                    ]);
+            }
+        },
+        end: icon,
+        frame: function (config, clas) {
+            var w = clas.compartments[0].width;
+            var h = clas.compartments[0].height;
+            box(config, clas);
+            if (clas.dividers.length)
+                clas.dividers.shift();
+            clas.dividers.unshift([
+                { x: 0, y: h },
+                { x: w - h / 4, y: h },
+                { x: w + h / 4, y: h / 2 },
+                { x: w + h / 4, y: 0 }
+            ]);
+        },
+        hidden: function (config, clas) {
+            clas.dividers = [];
+            clas.compartments = [];
+            clas.width = 1;
+            clas.height = 1;
+        },
+        input: box,
+        none: box,
+        note: box,
+        package: box,
+        receiver: box,
+        rhomb: function (config, clas) {
+            var width = Math.max.apply(Math, clas.compartments.map(function (e) { return e.width; }));
+            var height = nomnoml.skanaar.sum(clas.compartments, function (e) { return e.height; });
+            clas.width = width * 1.5;
+            clas.height = height * 1.5;
+            clas.dividers = [];
+            var y = height * 0.25;
+            for (var _i = 0, _a = clas.compartments; _i < _a.length; _i++) {
+                var comp = _a[_i];
+                comp.x = width * 0.25;
+                comp.y = y;
+                comp.width = width;
+                y += comp.height;
+                var slope = clas.width / clas.height;
+                if (comp != nomnoml.skanaar.last(clas.compartments))
+                    clas.dividers.push([
+                        { x: clas.width / 2 + (y < clas.height / 2 ? y * slope : (clas.height - y) * slope), y: y },
+                        { x: clas.width / 2 - (y < clas.height / 2 ? y * slope : (clas.height - y) * slope), y: y }
+                    ]);
+            }
+        },
+        roundrect: box,
+        sender: box,
+        start: icon,
+        table: function (config, clas) {
+            if (clas.compartments.length == 1) {
+                box(config, clas);
+                return;
+            }
+            var gridcells = clas.compartments.slice(1);
+            var rows = [[]];
+            function isRowBreak(e) {
+                return !e.lines.length && !e.nodes.length && !e.relations.length;
+            }
+            function isRowFull(e) {
+                var current = nomnoml.skanaar.last(rows);
+                return rows[0] != current && rows[0].length == current.length;
+            }
+            function isEnd(e) {
+                return comp == nomnoml.skanaar.last(gridcells);
+            }
+            for (var _i = 0, gridcells_1 = gridcells; _i < gridcells_1.length; _i++) {
+                var comp = gridcells_1[_i];
+                if (!isEnd(comp) && isRowBreak(comp) && nomnoml.skanaar.last(rows).length) {
+                    rows.push([]);
+                }
+                else if (isRowFull(comp)) {
+                    rows.push([comp]);
+                }
+                else {
+                    nomnoml.skanaar.last(rows).push(comp);
+                }
+            }
+            var header = clas.compartments[0];
+            var cellW = Math.max.apply(Math, __spreadArrays([header.width / rows[0].length], gridcells.map(function (e) { return e.width; })));
+            var cellH = Math.max.apply(Math, gridcells.map(function (e) { return e.height; }));
+            clas.width = cellW * rows[0].length;
+            clas.height = header.height + cellH * rows.length;
+            var hh = header.height;
+            clas.dividers = __spreadArrays([
+                [{ x: 0, y: header.height }, { x: 0, y: header.height }]
+            ], rows.map(function (e, i) { return [{ x: 0, y: hh + i * cellH }, { x: clas.width, y: hh + i * cellH }]; }), rows[0].map(function (e, i) { return [{ x: (i + 1) * cellW, y: hh }, { x: (i + 1) * cellW, y: clas.height }]; }));
+            header.x = 0;
+            header.y = 0;
+            header.width = clas.width;
+            for (var i = 0; i < rows.length; i++) {
+                for (var j = 0; j < rows[i].length; j++) {
+                    var cell = rows[i][j];
+                    cell.x = j * cellW;
+                    cell.y = hh + i * cellH;
+                    cell.width = cellW;
+                }
+            }
+        },
+        transceiver: box,
     };
     nomnoml.visualizers = {
         actor: function (node, x, y, config, g) {
             var a = config.padding / 2;
-            var yp = y + a / 2;
-            var actorCenter = { x: node.x, y: yp - a };
-            g.circle(actorCenter, a).fillAndStroke();
+            var yp = y + a * 4;
+            var faceCenter = { x: node.x, y: yp - a };
+            g.circle(faceCenter, a).fillAndStroke();
             g.path([{ x: node.x, y: yp }, { x: node.x, y: yp + 2 * a }]).stroke();
             g.path([{ x: node.x - a, y: yp + a }, { x: node.x + a, y: yp + a }]).stroke();
             g.path([{ x: node.x - a, y: yp + a + config.padding },
                 { x: node.x, y: yp + config.padding },
                 { x: node.x + a, y: yp + a + config.padding }]).stroke();
         },
-        "class": function (node, x, y, config, g) {
+        class: function (node, x, y, config, g) {
             g.rect(x, y, node.width, node.height).fillAndStroke();
         },
         database: function (node, x, y, config, g) {
-            var cy = y - config.padding / 2;
+            var pad = config.padding;
+            var cy = y - pad / 2;
             var pi = 3.1416;
-            g.rect(x, y, node.width, node.height).fill();
-            g.path([{ x: x, y: cy }, { x: x, y: cy + node.height }]).stroke();
+            g.rect(x, y + pad, node.width, node.height - pad * 1.5).fill();
+            g.path([{ x: x, y: cy + pad * 1.5 }, { x: x, y: cy - pad * 0.5 + node.height }]).stroke();
             g.path([
-                { x: x + node.width, y: cy },
-                { x: x + node.width, y: cy + node.height }
+                { x: x + node.width, y: cy + pad * 1.5 },
+                { x: x + node.width, y: cy - pad * 0.5 + node.height }
             ]).stroke();
-            g.ellipse({ x: node.x, y: cy }, node.width, config.padding * 1.5).fillAndStroke();
-            g.ellipse({ x: node.x, y: cy + node.height }, node.width, config.padding * 1.5, 0, pi)
+            g.ellipse({ x: node.x, y: cy + pad * 1.5 }, node.width, pad * 1.5).fillAndStroke();
+            g.ellipse({ x: node.x, y: cy - pad * 0.5 + node.height }, node.width, pad * 1.5, 0, pi)
                 .fillAndStroke();
         },
         ellipse: function (node, x, y, config, g) {
@@ -1224,10 +1387,10 @@ var nomnoml;
         },
         rhomb: function (node, x, y, config, g) {
             g.circuit([
-                { x: node.x, y: y - config.padding },
-                { x: x + node.width + config.padding, y: node.y },
-                { x: node.x, y: y + node.height + config.padding },
-                { x: x - config.padding, y: node.y }
+                { x: node.x, y: y },
+                { x: x + node.width, y: node.y },
+                { x: node.x, y: y + node.height },
+                { x: x, y: node.y }
             ]).fillAndStroke();
         },
         roundrect: function (node, x, y, config, g) {
@@ -1247,6 +1410,9 @@ var nomnoml;
             g.fillStyle(config.stroke);
             g.circle({ x: node.x, y: y + node.height / 2 }, node.height / 2.5).fill();
         },
+        table: function (node, x, y, config, g) {
+            g.rect(x, y, node.width, node.height).fillAndStroke();
+        },
         transceiver: function (node, x, y, config, g) {
             g.circuit([
                 { x: x - config.padding, y: y },
@@ -1256,7 +1422,7 @@ var nomnoml;
                 { x: x - config.padding, y: y + node.height },
                 { x: x, y: y + node.height / 2 }
             ]).fillAndStroke();
-        }
+        },
     };
 })(nomnoml || (nomnoml = {}));
 ;
@@ -1334,45 +1500,51 @@ var nomnoml;
   }
 */
 var nomnomlCoreParser = (function(){
-var o=function(k,v,o,l){for(o=o||{},l=k.length;l--;o[k[l]]=v);return o},$V0=[1,4],$V1=[1,7],$V2=[1,9],$V3=[5,10,12,14],$V4=[12,14];
+var o=function(k,v,o,l){for(o=o||{},l=k.length;l--;o[k[l]]=v);return o},$V0=[1,5],$V1=[1,8],$V2=[5,6,12,14],$V3=[12,14],$V4=[1,22];
 var parser = {trace: function trace () { },
 yy: {},
-symbols_: {"error":2,"root":3,"compartment":4,"EOF":5,"slot":6,"IDENT":7,"class":8,"association":9,"SEP":10,"parts":11,"|":12,"[":13,"]":14,"$accept":0,"$end":1},
-terminals_: {2:"error",5:"EOF",7:"IDENT",10:"SEP",12:"|",13:"[",14:"]"},
-productions_: [0,[3,2],[6,1],[6,1],[6,1],[4,1],[4,3],[11,1],[11,3],[11,2],[9,3],[8,3]],
+symbols_: {"error":2,"root":3,"compartment":4,"EOF":5,"SEP":6,"slot":7,"IDENT":8,"class":9,"association":10,"parts":11,"|":12,"[":13,"]":14,"$accept":0,"$end":1},
+terminals_: {2:"error",5:"EOF",6:"SEP",8:"IDENT",12:"|",13:"[",14:"]"},
+productions_: [0,[3,2],[3,3],[3,4],[3,3],[7,1],[7,1],[7,1],[4,1],[4,3],[11,1],[11,3],[11,2],[10,3],[9,3]],
 performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate /* action[1] */, $$ /* vstack */, _$ /* lstack */) {
 /* this == yyval */
 
 var $0 = $$.length - 1;
 switch (yystate) {
-case 1:
+case 1: case 2:
  return $$[$0-1] 
 break;
-case 2:
+case 3: case 4:
+ return $$[$0-2] 
+break;
+case 5:
 this.$ = $$[$0].trim().replace(/\\(\[|\]|\|)/g, '$'+'1');
 break;
-case 3: case 4:
+case 6: case 7:
 this.$ = $$[$0];
 break;
-case 5: case 7:
+case 8: case 10:
 this.$ = [$$[$0]];
 break;
-case 6:
+case 9:
 this.$ = $$[$0-2].concat($$[$0]);
 break;
-case 8:
+case 11:
 this.$ = $$[$0-2].concat([$$[$0]]);
 break;
-case 9:
+case 12:
 this.$ = $$[$0-1].concat([[]]);
 break;
-case 10:
+case 13:
 
-           var t = $$[$0-1].trim().replace(/\\(\[|\]|\|)/g, '$'+'1').match('^(.*?)([<:o+]*-/?-*[:o+>]*)(.*)$');
+           var t = $$[$0-1].trim().replace(/\\(\[|\]|\|)/g, '$'+'1').match('^(.*?)([<:o+]*[-_]/?[-_]*[:o+>]*)(.*)$');
+           if (!t) {
+             throw new Error('line '+_$[$0].first_line+': Classifiers must be separated by a relation or a line break')
+           }
            this.$ = {assoc:t[2], start:$$[$0-2], end:$$[$0], startLabel:t[1].trim(), endLabel:t[3].trim()};
   
 break;
-case 11:
+case 14:
 
            var type = 'CLASS';
            var id = $$[$0-1][0][0];
@@ -1387,8 +1559,8 @@ case 11:
 break;
 }
 },
-table: [{3:1,4:2,6:3,7:$V0,8:5,9:6,13:$V1},{1:[3]},{5:[1,8],10:$V2},o($V3,[2,5]),o($V3,[2,2]),o($V3,[2,3],{7:[1,10]}),o($V3,[2,4]),{4:12,6:3,7:$V0,8:5,9:6,11:11,13:$V1},{1:[2,1]},{6:13,7:$V0,8:5,9:6,13:$V1},{8:14,13:$V1},{12:[1,16],14:[1,15]},o($V4,[2,7],{10:$V2}),o($V3,[2,6]),o($V3,[2,10]),o([5,7,10,12,14],[2,11]),o($V4,[2,9],{6:3,8:5,9:6,4:17,7:$V0,13:$V1}),o($V4,[2,8],{10:$V2})],
-defaultActions: {8:[2,1]},
+table: [{3:1,4:2,6:[1,3],7:4,8:$V0,9:6,10:7,13:$V1},{1:[3]},{5:[1,9],6:[1,10]},{4:11,7:4,8:$V0,9:6,10:7,13:$V1},o($V2,[2,8]),o($V2,[2,5]),o($V2,[2,6],{8:[1,12]}),o($V2,[2,7]),{4:14,7:4,8:$V0,9:6,10:7,11:13,13:$V1},{1:[2,1]},{5:[1,15],7:16,8:$V0,9:6,10:7,13:$V1},{5:[1,17],6:[1,18]},{9:19,13:$V1},{12:[1,21],14:[1,20]},o($V3,[2,10],{6:$V4}),{1:[2,4]},o($V2,[2,9]),{1:[2,2]},{5:[1,23],7:16,8:$V0,9:6,10:7,13:$V1},o($V2,[2,13]),o([5,6,8,12,14],[2,14]),o($V3,[2,12],{7:4,9:6,10:7,4:24,8:$V0,13:$V1}),{7:16,8:$V0,9:6,10:7,13:$V1},{1:[2,3]},o($V3,[2,11],{6:$V4})],
+defaultActions: {9:[2,1],15:[2,4],17:[2,2],23:[2,3]},
 parseError: function parseError (str, hash) {
     if (hash.recoverable) {
         this.trace(str);
@@ -1865,13 +2037,13 @@ var YYSTATE=YY_START;
 switch($avoiding_name_collisions) {
 case 0:return 12
 break;
-case 1:return 7
+case 1:return 8
 break;
 case 2:return 13
 break;
 case 3:return 14
 break;
-case 4:return 10
+case 4:return 6
 break;
 case 5:return 5
 break;
