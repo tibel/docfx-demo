@@ -4,7 +4,7 @@
 <script type="text/javascript" src="{{_rel}}styles/docfx.js"></script>
 <script type="text/javascript" src="{{_rel}}styles/main.js"></script>
 
-<script type="text/javascript" src="{{_rel}}styles/dagre.min.js"></script>
+<script type="text/javascript" src="{{_rel}}styles/graphre.js"></script>
 <script type="text/javascript" src="{{_rel}}styles/nomnoml.js"></script>
 <script type="text/javascript" src="{{_rel}}styles/mermaid.min.js"></script>
 
