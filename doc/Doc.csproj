@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.Build.NoTargets/2.0.1">
+﻿<Project Sdk="Microsoft.Build.NoTargets/3.0.4">
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="docfx.console" Version="2.56.6">
+    <PackageReference Include="docfx.console" Version="2.56.7">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
