@@ -4,11 +4,11 @@
     <TargetFramework>netstandard2.0</TargetFramework>
 
     <LogFile>bin/docfx.log</LogFile>
-    <LogLevel>Verbose</LogLevel>
+    <LogLevel>Info</LogLevel>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="docfx.console" Version="2.56.7">
+    <PackageReference Include="docfx.console" Version="2.57.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>

@@ -130,11 +130,13 @@
         INPUT: buildStyle({ visual: 'input' }, { center: true }),
         INSTANCE: buildStyle({ visual: 'class' }, { center: true, underline: true }),
         LABEL: buildStyle({ visual: 'none' }, { center: true }),
+        LOLLIPOP: buildStyle({ visual: 'lollipop' }, { center: true }),
         NOTE: buildStyle({ visual: 'note' }, {}),
         PACKAGE: buildStyle({ visual: 'package' }, {}),
         RECEIVER: buildStyle({ visual: 'receiver' }, {}),
         REFERENCE: buildStyle({ visual: 'class', dashed: true }, { center: true }),
         SENDER: buildStyle({ visual: 'sender' }, {}),
+        SOCKET: buildStyle({ visual: 'socket' }, {}),
         START: buildStyle({ visual: 'start' }, {}),
         STATE: buildStyle({ visual: 'roundrect' }, { center: true }),
         SYNC: buildStyle({ visual: 'sync' }, { center: true }),
@@ -161,6 +163,23 @@
         clas.compartments = [];
         clas.width = config.fontSize * 2.5;
         clas.height = config.fontSize * 2.5;
+    }
+    function labelledIcon(config, clas) {
+        clas.width = config.fontSize * 1.5;
+        clas.height = config.fontSize * 1.5;
+        clas.dividers = [];
+        var y = (config.direction == 'LR') ? clas.height - config.padding : -clas.height / 2;
+        for (var comp of clas.compartments) {
+            if (config.direction == 'LR') {
+                comp.x = clas.width / 2 - comp.width / 2;
+                comp.y = y;
+            }
+            else {
+                comp.x = clas.width / 2 + config.padding / 2;
+                comp.y = y;
+            }
+            y += comp.height;
+        }
     }
     var layouters = {
         actor: function (config, clas) {
@@ -240,6 +259,7 @@
             clas.height = 1;
         },
         input: box,
+        lollipop: labelledIcon,
         none: box,
         note: box,
         package: box,
@@ -266,6 +286,7 @@
         },
         roundrect: box,
         sender: box,
+        socket: labelledIcon,
         start: icon,
         sync: function (config, clas) {
             clas.dividers = [];
@@ -382,6 +403,9 @@
                 { x: x, y: y + node.height }
             ]).fillAndStroke();
         },
+        lollipop: function (node, x, y, config, g) {
+            g.circle({ x: node.x, y: y + node.height / 2 }, node.height / 2.5).fillAndStroke();
+        },
         none: function (node, x, y, config, g) {
         },
         note: function (node, x, y, config, g) {
@@ -439,6 +463,11 @@
                 { x: x + node.width - config.padding, y: y + node.height },
                 { x: x, y: y + node.height }
             ]).fillAndStroke();
+        },
+        socket: function (node, x, y, config, g) {
+            var from = config.direction === 'TB' ? Math.PI : Math.PI / 2;
+            var to = config.direction === 'TB' ? 2 * Math.PI : -Math.PI / 2;
+            g.ellipse({ x: node.x, y: node.y }, node.width, node.height, from, to).stroke();
         },
         start: function (node, x, y, config, g) {
             g.fillStyle(config.stroke);
@@ -727,7 +756,7 @@
     break;
     case 13:
 
-               var t = $$[$0-1].trim().replace(/\\(\[|\]|\|)/g, '$'+'1').match('^(.*?)([<:o+]*[-_]/?[-_]*[:o+>]*)(.*)$');
+               var t = $$[$0-1].trim().replace(/\\(\[|\]|\|)/g, '$'+'1').match('^(.*?)([)<:o+(]*[-_]/?[-_]*[):o+>(]*)(.*)$');
                if (!t) {
                  throw new Error('line '+_$[$0].first_line+': Classifiers must be separated by a relation or a line break')
                }
@@ -784,8 +813,7 @@
         } else {
             this.parseError = Object.getPrototypeOf(this).parseError;
         }
-        
-            var lex = function () {
+        var lex = function () {
                 var token;
                 token = lexer.lex() || EOF;
                 if (typeof token !== 'number') {
@@ -1319,7 +1347,7 @@
                 arrowSize: +d.arrowSize || 1,
                 bendSize: +d.bendSize || 0.3,
                 direction: directionToDagre(d.direction),
-                gutter: +d.gutter || 5,
+                gutter: +d.gutter || 20,
                 edgeMargin: (+d.edgeMargin) || 0,
                 gravity: +((_a = d.gravity) !== null && _a !== void 0 ? _a : 1),
                 edges: d.edges == 'hard' ? 'hard' : 'rounded',
@@ -1406,6 +1434,112 @@
     function normalize(v) { return mult(v, 1 / mag(v)); }
     function rot(a) { return { x: a.y, y: -a.x }; }
 
+    const empty = false;
+    const filled = true;
+    function getPath(config, r) {
+        var path = r.path.slice(1, -1);
+        var endDir = normalize(diff(path[path.length - 2], last(path)));
+        var startDir = normalize(diff(path[1], path[0]));
+        var size = config.spacing * config.arrowSize / 30;
+        var A = 0;
+        var Ω = path.length - 1;
+        var copy = path.map(p => ({ x: p.x, y: p.y }));
+        var tokens = r.assoc.split(/[-_]/);
+        copy[A] = add(copy[A], mult(startDir, size * terminatorSize(tokens[0])));
+        copy[Ω] = add(copy[Ω], mult(endDir, size * terminatorSize(last(tokens))));
+        return copy;
+    }
+    function terminatorSize(id) {
+        if (id === '>' || id === '<')
+            return 5;
+        if (id === ':>' || id === '<:')
+            return 10;
+        if (id === '+')
+            return 14;
+        if (id === 'o')
+            return 14;
+        if (id === '(' || id === ')')
+            return 11;
+        if (id === '(o' || id === 'o)')
+            return 11;
+        if (id === '>o' || id === 'o<')
+            return 15;
+        return 0;
+    }
+    function drawTerminators(g, config, r) {
+        var start = r.path[1];
+        var end = r.path[r.path.length - 2];
+        var path = r.path.slice(1, -1);
+        var tokens = r.assoc.split(/[-_]/);
+        drawArrowEnd(last(tokens), path, end);
+        drawArrowEnd(tokens[0], path.reverse(), start);
+        function drawArrowEnd(id, path, end) {
+            var dir = normalize(diff(path[path.length - 2], last(path)));
+            var size = config.spacing * config.arrowSize / 30;
+            if (id === '>' || id === '<')
+                drawArrow(dir, size, filled, end);
+            else if (id === ':>' || id === '<:')
+                drawArrow(dir, size, empty, end);
+            else if (id === '+')
+                drawDiamond(dir, size, filled, end);
+            else if (id === 'o')
+                drawDiamond(dir, size, empty, end);
+            else if (id === '(' || id === ')') {
+                drawSocket(dir, size, 11, end);
+                drawStem(dir, size, 5, end);
+            }
+            else if (id === '(o' || id === 'o)') {
+                drawSocket(dir, size, 11, end);
+                drawStem(dir, size, 5, end);
+                drawBall(dir, size, 11, end);
+            }
+            else if (id === '>o' || id === 'o<') {
+                drawArrow(dir, size * 0.75, empty, add(end, mult(dir, size * 10)));
+                drawStem(dir, size, 8, end);
+                drawBall(dir, size, 8, end);
+            }
+        }
+        function drawBall(nv, size, stem, end) {
+            var center = add(end, mult(nv, size * stem));
+            g.fillStyle(config.fill[0]);
+            g.ellipse(center, size * 6, size * 6).fillAndStroke();
+        }
+        function drawStem(nv, size, stem, end) {
+            var center = add(end, mult(nv, size * stem));
+            g.path([center, end]).stroke();
+        }
+        function drawSocket(nv, size, stem, end) {
+            var base = add(end, mult(nv, size * stem));
+            var t = rot(nv);
+            var socket = range([-Math.PI / 2, Math.PI / 2], 12).map(a => add(base, add(mult(nv, -6 * size * Math.cos(a)), mult(t, 6 * size * Math.sin(a)))));
+            g.path(socket).stroke();
+        }
+        function drawArrow(nv, size, isOpen, end) {
+            const x = (s) => add(end, mult(nv, s * size));
+            const y = (s) => mult(rot(nv), s * size);
+            var arrow = [
+                add(x(10), y(4)),
+                x((isOpen && !config.fillArrows) ? 5 : 10),
+                add(x(10), y(-4)),
+                end
+            ];
+            g.fillStyle(isOpen ? config.stroke : config.fill[0]);
+            g.circuit(arrow).fillAndStroke();
+        }
+        function drawDiamond(nv, size, isOpen, end) {
+            const x = (s) => add(end, mult(nv, s * size));
+            const y = (s) => mult(rot(nv), s * size);
+            var arrow = [
+                add(x(7), y(4)),
+                x(14),
+                add(x(7), y(-4)),
+                end
+            ];
+            g.fillStyle(isOpen ? config.stroke : config.fill[0]);
+            g.circuit(arrow).fillAndStroke();
+        }
+    }
+
     function render(graphics, config, compartment, setFont) {
         var g = graphics;
         function renderCompartment(compartment, color, style, level) {
@@ -1481,7 +1615,6 @@
             else
                 g.path(p).stroke();
         }
-        var empty = false, filled = true, diamond = true;
         function renderLabel(label) {
             if (!label || !label.text)
                 return;
@@ -1490,9 +1623,7 @@
             lines.forEach((l, i) => g.fillText(l, label.x, label.y + fontSize * (i + 1)));
         }
         function renderRelation(r) {
-            var start = r.path[1];
-            var end = r.path[r.path.length - 2];
-            var path = r.path.slice(1, -1);
+            var path = getPath(config, r);
             g.fillStyle(config.stroke);
             setFont(config, 'normal', null);
             renderLabel(r.startLabel);
@@ -1507,37 +1638,7 @@
                 else
                     strokePath(path);
             }
-            function drawArrowEnd(id, path, end) {
-                if (id === '>' || id === '<')
-                    drawArrow(path, filled, end, false);
-                else if (id === ':>' || id === '<:')
-                    drawArrow(path, empty, end, false);
-                else if (id === '+')
-                    drawArrow(path, filled, end, diamond);
-                else if (id === 'o')
-                    drawArrow(path, empty, end, diamond);
-            }
-            var tokens = r.assoc.split(/[-_]/);
-            drawArrowEnd(last(tokens), path, end);
-            drawArrowEnd(tokens[0], path.reverse(), start);
-        }
-        function drawArrow(path, isOpen, arrowPoint, diamond) {
-            var size = config.spacing * config.arrowSize / 30;
-            var v = diff(path[path.length - 2], last(path));
-            var nv = normalize(v);
-            function getArrowBase(s) { return add(arrowPoint, mult(nv, s * size)); }
-            var arrowBase = getArrowBase(diamond ? 7 : 10);
-            var t = rot(nv);
-            var arrowButt = (diamond) ? getArrowBase(14)
-                : (isOpen && !config.fillArrows) ? getArrowBase(5) : arrowBase;
-            var arrow = [
-                add(arrowBase, mult(t, 4 * size)),
-                arrowButt,
-                add(arrowBase, mult(t, -4 * size)),
-                arrowPoint
-            ];
-            g.fillStyle(isOpen ? config.stroke : config.fill[0]);
-            g.circuit(arrow).fillAndStroke();
+            drawTerminators(g, config, r);
         }
         function snapToPixels() {
             if (config.lineWidth % 2 === 1)
@@ -1803,12 +1904,10 @@
             circle: function (p, r) {
                 return newElement('circle', { r: r, cx: tX(p.x), cy: tY(p.y) });
             },
-            ellipse: function (center, w, h, start, stop) {
-                if (stop) {
-                    var y = tY(center.y);
-                    return newElement('path', { d: 'M' + tX(center.x - w / 2) + ' ' + y +
-                            'A' + w / 2 + ' ' + h / 2 + ' 0 1 0 ' + tX(center.x + w / 2) + ' ' + y
-                    });
+            ellipse: function (center, w, h, start = 0, stop = 0) {
+                if (start || stop) {
+                    var path = range([start, stop], 64).map(a => add(center, { x: Math.cos(a) * w / 2, y: Math.sin(a) * h / 2 }));
+                    return tracePath(path);
                 }
                 else {
                     return newElement('ellipse', { cx: tX(center.x), cy: tY(center.y), rx: w / 2, ry: h / 2 });
