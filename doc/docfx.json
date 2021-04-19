@@ -33,15 +33,13 @@
       {
         "files": [
           "articles/images/**",
-		  "arc42/images/**"
+          "arc42/images/**"
         ]
       }
     ],
     "overwrite": [
       {
-        "files": [
-          "apidoc/**.md"
-        ]
+        "files": [ "apidoc/**.md" ]
       }
     ],
     "dest": "bin/_site",
@@ -57,10 +55,6 @@
     ],
     "postProcessors": [],
     "markdownEngineName": "markdig",
-    "noLangKeyword": false,
-    "keepFileLink": false,
-    "cleanupCacheHistory": false,
-    "disableGitFeatures": false,
     "xrefService": [
       "https://xref.docs.microsoft.com/query?uid={uid}"
     ]
