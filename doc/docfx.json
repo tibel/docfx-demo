@@ -55,6 +55,11 @@
     ],
     "postProcessors": [],
     "markdownEngineName": "markdig",
+    "markdownEngineProperties": {
+      "markdigExtensions": [
+        "diagrams"
+      ]
+    },
     "xrefService": [
       "https://xref.docs.microsoft.com/query?uid={uid}"
     ]

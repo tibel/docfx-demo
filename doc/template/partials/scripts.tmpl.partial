@@ -10,30 +10,15 @@
 
 <!-- diagram support -->
 <script>
-  mermaid.initialize({
-    startOnLoad: false
-  });
+  mermaid.initialize({ startOnLoad: true });
 
   window.onload = function () {
-    const mermaidElements = document.getElementsByClassName("lang-mermaid");
-    let index = 0;
+    const nomnomlElements = document.getElementsByClassName("nomnoml");
 
-    while (mermaidElements.length != 0) {
-      let element = mermaidElements[0];
-      mermaid.render('graph'+index, element.innerText, (svgGraph) => {
-        element.parentElement.outerHTML = "<div class='mermaid'>" + svgGraph + "</div>";
-      });
-      ++index;
-    }
-
-    const nomnomlElements = document.getElementsByClassName("lang-nomnoml"); 
-    index = 0;
-
-    while (nomnomlElements.length != 0) {
-      let element = nomnomlElements[0];
+    for (var i=0; i < nomnomlElements.length; i++) {
+      let element = nomnomlElements[i];
       let svgGraph = nomnoml.renderSvg(element.innerText);
-      element.parentElement.outerHTML = "<div class='nomnoml'>" + svgGraph + "</div>";
-      ++index;
+      element.innerHTML = svgGraph;
     }
   }
 </script>
