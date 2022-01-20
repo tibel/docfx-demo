@@ -17,7 +17,7 @@
 
     for (var i=0; i < nomnomlElements.length; i++) {
       let element = nomnomlElements[i];
-      let svgGraph = nomnoml.renderSvg(element.innerText);
+      let svgGraph = nomnoml.renderSvg(element.textContent);
       element.innerHTML = svgGraph;
     }
   }
