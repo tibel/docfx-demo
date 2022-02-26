@@ -1,24 +1,6 @@
-{{!Copyright (c) Microsoft. All rights reserved. Licensed under the MIT license. See LICENSE file in the project root for full license information.}}
-
 <script type="text/javascript" src="{{_rel}}styles/docfx.vendor.js"></script>
 <script type="text/javascript" src="{{_rel}}styles/docfx.js"></script>
 <script type="text/javascript" src="{{_rel}}styles/main.js"></script>
 
-<script type="text/javascript" src="{{_rel}}styles/graphre.js"></script>
-<script type="text/javascript" src="{{_rel}}styles/nomnoml.js"></script>
 <script type="text/javascript" src="{{_rel}}styles/mermaid.min.js"></script>
-
-<!-- diagram support -->
-<script>
-  mermaid.initialize({ startOnLoad: true });
-
-  window.onload = function () {
-    const nomnomlElements = document.getElementsByClassName("nomnoml");
-
-    for (var i=0; i < nomnomlElements.length; i++) {
-      let element = nomnomlElements[i];
-      let svgGraph = nomnoml.renderSvg(element.textContent);
-      element.innerHTML = svgGraph;
-    }
-  }
-</script>
+<script>mermaid.initialize({ startOnLoad: true });</script>
