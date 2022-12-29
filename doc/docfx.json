@@ -50,6 +50,7 @@
     },
     "fileMetadataFiles": [],
     "template": [
+      "default",
       "statictoc",
       "template"
     ],
