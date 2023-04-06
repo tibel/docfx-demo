@@ -8,8 +8,7 @@
   </PropertyGroup>
 
   <Target Name="doxfx" BeforeTargets="AfterBuild">
-    <Exec Command="dotnet tool update -g docfx" />
-    <Exec Command="docfx --log bin/docfx.log" />
+    <Exec Command="docfx" />
   </Target>
 
 </Project>
